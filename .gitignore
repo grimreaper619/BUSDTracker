@@ -3,4 +3,5 @@ build/contracts
 package-lock.json
 .env
 .vscode
+yarn.lock
 
