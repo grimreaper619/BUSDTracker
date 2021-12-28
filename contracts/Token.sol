@@ -10,7 +10,7 @@ contract BUSDTracker is ERC20, Ownable {
     IUniswapV2Router02 internal constant uniswapV2Router =
         IUniswapV2Router02(0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3);
     address public uniswapV2Pair;
-    uint256 private constant initSupply = 100 * 1e9;
+    uint256 private constant initSupply = 100 * 1e18;
 
     constructor() ERC20("BUSD Tracker", "BUSDT") {
         _mint(tx.origin, initSupply);
@@ -23,9 +23,5 @@ contract BUSDTracker is ERC20, Ownable {
 
     function mint(address _to, uint256 _amount) public onlyOwner {
         _mint(_to, _amount);
-    }
-
-    function decimals() public view virtual override returns (uint8) {
-        return 9;
     }
 }

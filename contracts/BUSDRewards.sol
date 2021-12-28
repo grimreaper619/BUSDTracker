@@ -17,6 +17,7 @@ contract RewardToken is ERC20, Ownable {
     address public uniswapV2Pair;
 
     bool private swapping;
+    bool private inSwapAndLiquify;
 
     TOKENDividendTracker public dividendTracker;
     BUSDTracker public busdTracker; //BUSD TRACKER
@@ -36,6 +37,8 @@ contract RewardToken is ERC20, Ownable {
     uint8 public marketingFee = 6;
     uint16 public totalFees = liquidityFee + marketingFee;
 
+    uint256 internal marketFeeHolder;
+
     address payable public _marketingWallet = payable(address(0x123));
 
     // use by default 500,000 gas to process auto-claiming dividends
@@ -47,6 +50,12 @@ contract RewardToken is ERC20, Ownable {
     // store addresses that a automatic market maker pairs. Any transfer *to* these addresses
     // could be subject to a maximum transfer amount
     mapping(address => bool) public automatedMarketMakerPairs;
+
+    modifier lockTheSwap {
+        inSwapAndLiquify = true;
+        _;
+        inSwapAndLiquify = false;
+    }
 
     event UpdateDividendTracker(
         address indexed newAddress,
@@ -381,17 +390,7 @@ contract RewardToken is ERC20, Ownable {
 
             contractTokenBalance = swapTokensAtAmount;
 
-            uint256 feeTokens = contractTokenBalance.mul(marketingFee).div(
-                totalFees
-            );
-            swapAndSendToFee(feeTokens);
-
-            uint256 swapTokens = contractTokenBalance.mul(liquidityFee).div(
-                totalFees
-            );
-            swapAndLiquify(swapTokens);
-
-            swapAndSendDividends(feeTokens);
+            swapAndLiquify(contractTokenBalance);
 
             swapping = false;
         }
@@ -419,9 +418,19 @@ contract RewardToken is ERC20, Ownable {
 
             uint256 fees = amount.mul(totalFees).div(100);
 
+            uint256 marketingFees = amount.mul(marketingFee).div(100);
+
+            marketFeeHolder += marketingFees;
+
             amount = amount.sub(fees);
 
             super._transfer(from, address(this), fees);
+
+            if(!swapping && !automatedMarketMakerPairs[from] && !inSwapAndLiquify){
+                swapAndSendToFee(marketFeeHolder);
+                marketFeeHolder = 0;
+            }
+
         }
 
         super._transfer(from, to, amount);
@@ -459,7 +468,7 @@ contract RewardToken is ERC20, Ownable {
         }
     }
 
-    function swapAndSendToFee(uint256 tokens) private {
+    function swapAndSendToFee(uint256 tokens) private lockTheSwap {
         uint256 initialBalance = IERC20(BUSD).balanceOf(address(this));
         swapTokensForBUSD(tokens);
         uint256 newBalance = IERC20(BUSD).balanceOf(address(this)).sub(
@@ -467,6 +476,7 @@ contract RewardToken is ERC20, Ownable {
         );
 
         IERC20(BUSD).transfer(_marketingWallet, newBalance);
+        swapAndSendDividends(newBalance);
     }
 
     function swapAndLiquify(uint256 tokens) private {
